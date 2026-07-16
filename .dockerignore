@@ -1,6 +1,10 @@
 /node_modules
 /vendor
 .env
+.env.compose
+.env.minikube
+.env.prod
+.env.production
 .git
 .editorconfig
 .phpunit.result.cache
