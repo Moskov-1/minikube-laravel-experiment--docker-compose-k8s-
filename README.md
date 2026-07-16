@@ -1,83 +1,353 @@
-# Dockerized Laravel Project - Velzon
+# Laravel + MySQL on Kubernetes (Minikube)
 
-This project is a containerized Laravel application designed for easy local development and production-ready deployment. It uses Docker Compose to orchestrate the application and its database.
-
-## 🚀 Getting Started
-
-Follow these steps to get the project up and running on your local machine.
-
-### Prerequisites
-
-Ensure you have the following installed:
-- [Docker](https://www.docker.com/get-started)
-- [Docker Compose](https://docs.docker.com/compose/install/)
-
-### 🛠️ Installation & Setup
-
-1. **Clone the repository:**
-   ```bash
-   git clone <repository-url>
-   cd docker-sample-velzon
-   ```
-
-2. **Environment Configuration:**
-   Copy the example environment file:
-   ```bash
-   cp .env.example .env
-   ```
-   *Note: The `docker-compose.yml` already contains default environment variables for local development, but Laravel still requires a `.env` file.*
-
-3. **Build and Start the Containers:**
-   Run the following command to build the image and start the services in the background:
-   ```bash
-   docker-compose up -d --build
-   ```
-
-4. **Install Dependencies (if not already handled by Docker):**
-   The Dockerfile handles `composer install` and `npm install`, but if you need to run them manually within the container:
-   ```bash
-   docker-compose exec app composer install
-   docker-compose exec app npm install
-   ```
-
-5. **Generate Application Key:**
-   ```bash
-   docker-compose exec app php artisan key:generate
-   ```
-
-6. **Run Database Migrations:**
-   ```bash
-   docker-compose exec app php artisan migrate
-   ```
-
-### 🌐 Accessing the Application
-
-- **Web Application:** [http://localhost:8000](http://localhost:8000)
-- **Vite (Hot Module Replacement):** [http://localhost:5173](http://localhost:5173)
-
-### 🗄️ Database Connection
-
-The project uses MySQL 8.0. You can connect to the database using the following credentials:
-- **Host:** `localhost` (from your host machine) or `db` (from within the container)
-- **Port:** `3306`
-- **Database:** `laravel`
-- **Username:** `root`
-- **Password:** `root`
-
-## 🛠️ Common Commands
-
-- **Stop containers:** `docker-compose stop`
-- **Down containers (removes network):** `docker-compose down`
-- **View logs:** `docker-compose logs -f`
-- **Run Artisan commands:** `docker-compose exec app php artisan <command>`
-- **Run NPM commands:** `docker-compose exec app npm <command>`
-
-## 📁 Project Structure
-
-- `Dockerfile`: Defines the PHP 8.2 + Apache environment.
-- `docker-compose.yml`: Orchestrates the `app` and `db` services.
-- `docker-entrypoint.sh`: Handles cache clearing/caching based on the environment.
-- `k8s-simulation.yaml`: Configuration for Kubernetes deployment simulation.
+A simple Laravel application deployed on Kubernetes using Minikube, backed by a MySQL database. This project demonstrates containerization, Kubernetes Deployments, Services, Secrets, scaling, and local development workflows without requiring Docker Hub.
 
 ---
-Built with ❤️ for scalable Laravel development.
+
+# Architecture
+
+```text
+                    ┌─────────────────────┐
+                    │   Laravel Service   │
+                    │   LoadBalancer      │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+            ┌───────────────────────────────────┐
+            │ Laravel Deployment (3 Replicas)   │
+            ├───────────────────────────────────┤
+            │ Laravel Pod #1                    │
+            │ Laravel Pod #2                    │
+            │ Laravel Pod #3                    │
+            └───────────────────────────────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │   MySQL Service     │
+                    │   ClusterIP         │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │ MySQL Deployment    │
+                    │ 1 Replica           │
+                    └─────────────────────┘
+```
+
+---
+
+# Prerequisites
+
+- Docker Desktop
+- Minikube
+- kubectl
+- Laravel Application
+- Dockerfile for Laravel
+
+Verify installation:
+
+```bash
+docker --version
+minikube version
+kubectl version --client
+```
+
+---
+
+# Start Minikube
+
+```bash
+minikube start
+```
+
+Verify cluster status:
+
+```bash
+minikube status
+```
+
+Expected output:
+
+```text
+host: Running
+kubelet: Running
+apiserver: Running
+kubeconfig: Configured
+```
+
+---
+
+# Build Application Image
+
+Build the Laravel image locally:
+
+```bash
+docker build -t laravel-app:latest .
+```
+
+Load the image into Minikube:
+
+```bash
+minikube image load laravel-app:latest
+```
+
+Verify:
+
+```bash
+minikube image ls
+```
+
+---
+
+# Create Kubernetes Secret
+
+Create a dedicated environment file:
+
+```env
+APP_NAME=Laravel
+APP_ENV=local
+APP_DEBUG=true
+
+DB_CONNECTION=mysql
+DB_HOST=mysql-service
+DB_DATABASE=laravel
+DB_USERNAME=root
+DB_PASSWORD=root
+
+APP_KEY=base64:your-key
+```
+
+Create the secret:
+
+```bash
+kubectl create secret generic laravel-secrets \
+  --from-env-file=.env.minikube
+```
+
+Verify:
+
+```bash
+kubectl get secret
+kubectl describe secret laravel-secrets
+```
+
+---
+
+# Deployment Configuration
+
+The Laravel Deployment loads environment variables from the secret:
+
+```yaml
+envFrom:
+    - secretRef:
+          name: laravel-secrets
+```
+
+MySQL runs as a separate Deployment and is exposed internally through a ClusterIP Service.
+
+---
+
+# Deploy Application
+
+Apply all resources:
+
+```bash
+kubectl apply -f k8s.yml
+```
+
+Verify Deployments:
+
+```bash
+kubectl get deploy
+```
+
+Verify Pods:
+
+```bash
+kubectl get pods
+```
+
+Expected:
+
+```text
+laravel-app-xxxxx            Running
+laravel-app-yyyyy            Running
+laravel-app-zzzzz            Running
+mysql-deployment-xxxxx       Running
+```
+
+Verify Services:
+
+```bash
+kubectl get svc
+```
+
+---
+
+# Access the Application
+
+Open the Laravel service:
+
+```bash
+minikube service laravel-service
+```
+
+This automatically opens the application in the browser.
+
+---
+
+# Database Migrations and Seeders
+
+Find a Laravel pod:
+
+```bash
+kubectl get pods
+```
+
+Execute migrations:
+
+```bash
+kubectl exec -it <laravel-pod> -- php artisan migrate
+```
+
+Run seeders:
+
+```bash
+kubectl exec -it <laravel-pod> -- php artisan db:seed
+```
+
+Or run both:
+
+```bash
+kubectl exec -it <laravel-pod> -- php artisan migrate --seed
+```
+
+---
+
+# Updating Secrets
+
+After modifying `.env.minikube`:
+
+```bash
+kubectl create secret generic laravel-secrets \
+  --from-env-file=.env.minikube \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+Restart the deployment:
+
+```bash
+kubectl rollout restart deployment laravel-app
+```
+
+Wait for rollout:
+
+```bash
+kubectl rollout status deployment/laravel-app
+```
+
+---
+
+# Scaling Laravel
+
+Increase replicas:
+
+```bash
+kubectl scale deployment laravel-app --replicas=5
+```
+
+Verify:
+
+```bash
+kubectl get pods
+```
+
+Reduce replicas:
+
+```bash
+kubectl scale deployment laravel-app --replicas=1
+```
+
+---
+
+# Useful Commands
+
+## View Pods
+
+```bash
+kubectl get pods
+```
+
+## View Deployments
+
+```bash
+kubectl get deploy
+```
+
+## View Services
+
+```bash
+kubectl get svc
+```
+
+## View Logs
+
+```bash
+kubectl logs <pod-name>
+```
+
+## Execute Into Container
+
+```bash
+kubectl exec -it <pod-name> -- sh
+```
+
+## Describe Resource
+
+```bash
+kubectl describe pod <pod-name>
+```
+
+---
+
+# Stop Minikube
+
+Stop the cluster while preserving state:
+
+```bash
+minikube stop
+```
+
+Start again later:
+
+```bash
+minikube start
+```
+
+---
+
+# Delete Minikube Cluster
+
+Remove everything:
+
+```bash
+minikube delete
+```
+
+---
+
+# Concepts Learned
+
+- Docker image creation
+- Local image loading into Minikube
+- Kubernetes Deployments
+- Kubernetes Services
+- ClusterIP vs LoadBalancer
+- Environment variables
+- Kubernetes Secrets
+- Rolling updates
+- Scaling replicas
+- Laravel container deployment
+- MySQL service discovery
+- Running migrations and seeders inside containers
+- Basic Kubernetes troubleshooting
