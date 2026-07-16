@@ -1,0 +1,37 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Web\Backend\Settings\MailController;
+use App\Http\Controllers\Web\Backend\Settings\SystemController;
+use App\Http\Controllers\Web\Backend\Settings\ProfileController;
+use App\Http\Controllers\Web\Backend\Settings\StripeSettingsController;
+
+Route::group(["prefix"=> "settings", "as"=> "settings."], function () {
+    Route::controller(ProfileController::class)->name('profile.')->group(function(){
+        Route::get('/', 'index')->name('index');
+        Route::post('upload-avatar','avatar')->name('avatar.upload');
+        Route::post('upload-banner','banner')->name('banner.upload');
+        Route::patch('update-profile', 'update')->name('update');
+    });
+
+    Route::controller(SystemController::class)->prefix('system/')->name('system.')->group(function(){
+        Route::get('', 'index')->name('index');
+        Route::put('update', 'update')->name('update');
+        // when a file is cleared via dropify we hit this route to remove it
+        Route::delete('file-delete', 'deleteFile')->name('file.delete');
+    });
+
+    Route::put('update-maintainance-mode', [SystemController::class, 'maintainaceToggle'])->name('app-mode.update');
+
+
+    Route::controller(MailController::class)->prefix('mail/')->name('mail.')->group(function(){
+        Route::get('', 'index')->name('index');
+        Route::patch('update', 'update')->name('update');
+    });
+
+    Route::controller(StripeSettingsController::class)->prefix('payments/')->name('payments.stripe.')->group(function(){
+        Route::get('', 'index')->name('index');
+        Route::put('update', 'update')->name('update');
+        Route::put('test', 'test')->name('test');
+    });
+});
