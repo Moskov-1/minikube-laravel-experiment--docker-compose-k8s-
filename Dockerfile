@@ -89,12 +89,12 @@ COPY --from=node-builder /app/public/build ./public/build
 COPY --from=composer-builder /app/vendor ./vendor
 
 # Required Laravel directories
-RUN mkdir -p \
-    storage/logs \
-    storage/framework/cache \
-    storage/framework/sessions \
-    storage/framework/views \
-    bootstrap/cache
+# RUN mkdir -p \
+#     storage/logs \
+#     storage/framework/cache \
+#     storage/framework/sessions \
+#     storage/framework/views \
+#     bootstrap/cache
 
 # Permissions
 RUN chown -R www-data:www-data \
