@@ -11,25 +11,28 @@ services:
       - APP_DEBUG=true
       - APP_NAME=dn
 
-      - DB_CONNECTION=mysql
-      - DB_HOST=db
-      - DB_PORT=3306
+      # - DB_CONNECTION=mysql
+      # - DB_HOST=db
+      # - DB_PORT=3306
 
     env_file:
       - .env.compose
 
-    volumes:
-      - .:/app
-      - /app/node_modules
+    # volumes:
+    #   - .:/app
+    #   - /app/node_modules
+    #   - /app/.env.compose
     depends_on:
       - db
 
   # The Database (One DB requirement)
   db:
     image: mysql:8.0
-    environment:
-      - MYSQL_DATABASE=laravel
-      - MYSQL_ROOT_PASSWORD=root
+    # environment:
+    #   - MYSQL_DATABASE=${MYSQL_DATABASE}
+    #   - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+    env_file:
+      - .env.compose
     volumes:
       - db_data:/var/lib/mysql
 
