@@ -82,13 +82,13 @@ kubeconfig: Configured
 Build the Laravel image locally:
 
 ```bash
-docker build -t laravel-app:latest .
+docker build -t minikube-laravel:latest .
 ```
 
 Load the image into Minikube:
 
 ```bash
-minikube image load laravel-app:latest
+minikube image load minikube-laravel:latest
 ```
 
 Verify:
@@ -170,9 +170,9 @@ kubectl get pods
 Expected:
 
 ```text
-laravel-app-xxxxx            Running
-laravel-app-yyyyy            Running
-laravel-app-zzzzz            Running
+minikube-laravel-xxxxx            Running
+minikube-laravel-yyyyy            Running
+minikube-laravel-zzzzz            Running
 mysql-deployment-xxxxx       Running
 ```
 
@@ -237,13 +237,13 @@ kubectl create secret generic laravel-secrets \
 Restart the deployment:
 
 ```bash
-kubectl rollout restart deployment laravel-app
+kubectl rollout restart deployment minikube-laravel
 ```
 
 Wait for rollout:
 
 ```bash
-kubectl rollout status deployment/laravel-app
+kubectl rollout status deployment/minikube-laravel
 ```
 
 ---
@@ -253,7 +253,7 @@ kubectl rollout status deployment/laravel-app
 Increase replicas:
 
 ```bash
-kubectl scale deployment laravel-app --replicas=5
+kubectl scale deployment minikube-laravel --replicas=5
 ```
 
 Verify:
@@ -265,7 +265,7 @@ kubectl get pods
 Reduce replicas:
 
 ```bash
-kubectl scale deployment laravel-app --replicas=1
+kubectl scale deployment minikube-laravel --replicas=1
 ```
 
 ---

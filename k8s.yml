@@ -1,0 +1,170 @@
+# 1. Database Service (The "One DB")
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+spec:
+  ports:
+    - port: 3306
+  selector:
+    app: mysql
+
+---
+
+# 2. Database Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-deployment
+spec:
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:8.0
+
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+
+        # env:
+        # - name: MYSQL_ROOT_PASSWORD
+        #   value: "root"
+        # - name: MYSQL_DATABASE
+        #   value: "laravel"
+
+        envFrom:
+        - secretRef:               # kubectl create secret generic laravel-secrets --from-env-file=.env.minikube
+            name: laravel-secrets  # created is via CLI
+
+        ports:
+        - containerPort: 3306
+
+---
+
+# 3. Application Deployment (Scalable)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: laravel-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: laravel
+  template:
+    metadata:
+      labels:
+        app: laravel
+    spec:
+      volumes:
+        - name: shared-files
+          emptyDir: {}
+        - name: nginx-config
+          configMap:
+            name: nginx-config
+      containers:
+      - name: app
+        image: minikube-laravel:latest # Replace with your actual image name
+        imagePullPolicy: IfNotPresent
+        # imagePullPolicy: Never
+
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+
+        env:
+        - name: APP_ENV
+          value: "local"
+        - name: APP_DEBUG
+          value: "true"
+        # - name : APP_KEY
+        #   value: "base64:abcd="
+        - name: APP_NAME
+          value: "dn"
+
+        - name: DB_HOST
+          value: "mysql-service" # Connecting to the DB service name
+        - name: DB_CONNECTION
+          value: "mysql"
+
+        envFrom:
+        - secretRef:               # kubectl create secret generic laravel-secrets --from-env-file=.env.minikube
+            name: laravel-secrets  # created is via CLI
+        ports:
+        - containerPort: 8080
+
+        volumeMounts:
+          - name: shared-files
+            mountPath: /var/www
+
+      - name: nginx
+        image: nginx:alpine
+        resources:
+          requests:
+            cpu: "50m"       # Nginx is very lightweight
+            memory: "64Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+        ports:
+          - containerPort: 80 # Nginx listens on 80
+        volumeMounts:
+          - name: shared-files
+            mountPath: /var/www
+          - name: nginx-config
+            mountPath: /etc/nginx/conf.d/default.conf
+            subPath: default.conf
+---
+# 4. Nginx ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name localhost;
+        root /var/www/public;
+        index index.php index.html;
+
+        location / {
+            try_files $uri $uri/ /index.php?$query_string;
+        }
+
+        location ~ \.php$ {
+            fastcgi_pass 127.0.0.1:9000; # Talks to PHP-FPM in the same pod
+            fastcgi_index index.php;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            include fastcgi_params;
+        }
+    }
+
+---
+# 5. Application Service (The "Load Balancer")
+apiVersion: v1
+kind: Service
+metadata:
+  name: laravel-service
+spec:
+  type: LoadBalancer # <--- This simulates the AWS ALB
+  ports:
+    - port: 80
+      targetPort: 80
+  selector:
+    app: laravel
