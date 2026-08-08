@@ -28,7 +28,6 @@ spec:
       containers:
       - name: mysql
         image: mysql:8.0
-
         resources:
           requests:
             cpu: "250m"
@@ -36,23 +35,20 @@ spec:
           limits:
             cpu: "500m"
             memory: "1Gi"
-
         # env:
         # - name: MYSQL_ROOT_PASSWORD
         #   value: "root"
         # - name: MYSQL_DATABASE
         #   value: "laravel"
-
         envFrom:
         - secretRef:               # kubectl create secret generic laravel-secrets --from-env-file=.env.minikube
             name: laravel-secrets  # created is via CLI
-
         ports:
         - containerPort: 3306
 
 ---
 
-# 3. Application Deployment (Scalable)
+# 3. Application Deployment (Nginx + PHP-FPM with InitContainer)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -73,12 +69,23 @@ spec:
         - name: nginx-config
           configMap:
             name: nginx-config
+
+      # --- INIT CONTAINER: Copies code into emptyDir BEFORE app starts ---
+      initContainers:
+      - name: copy-app-files
+        image: minikube-laravel:latest
+        imagePullPolicy: Never # needs to be mentioned herr too.
+        command: ["sh", "-c", "cp -rp /app/. /shared-dir/"]
+        volumeMounts:
+          - name: shared-files
+            mountPath: /shared-dir
+
       containers:
+      # --- PHP-FPM ---
       - name: app
         image: minikube-laravel:latest # Replace with your actual image name
         imagePullPolicy: IfNotPresent
         # imagePullPolicy: Never
-
         resources:
           requests:
             cpu: "250m"
@@ -86,32 +93,29 @@ spec:
           limits:
             cpu: "500m"
             memory: "1Gi"
-
         env:
-        - name: APP_ENV
-          value: "local"
-        - name: APP_DEBUG
-          value: "true"
-        # - name : APP_KEY
-        #   value: "base64:abcd="
-        - name: APP_NAME
-          value: "dn"
-
-        - name: DB_HOST
-          value: "mysql-service" # Connecting to the DB service name
-        - name: DB_CONNECTION
-          value: "mysql"
-
+          - name: APP_ENV
+            value: "local"
+          - name: APP_DEBUG
+            value: "true"
+          # - name : APP_KEY
+          #   value: "base64:abcd="
+          - name: APP_NAME
+            value: "dn"
+          - name: DB_HOST
+            value: "mysql-service"
+          - name: DB_CONNECTION
+            value: "mysql"
         envFrom:
-        - secretRef:               # kubectl create secret generic laravel-secrets --from-env-file=.env.minikube
-            name: laravel-secrets  # created is via CLI
+          - secretRef:
+              name: laravel-secrets
         ports:
-        - containerPort: 8080
-
+          - containerPort: 9000 # PHP-FPM port
         volumeMounts:
           - name: shared-files
-            mountPath: /var/www
+            mountPath: /app
 
+      # --- SIDECAR ---
       - name: nginx
         image: nginx:alpine
         resources:
@@ -122,14 +126,16 @@ spec:
             cpu: "100m"
             memory: "128Mi"
         ports:
-          - containerPort: 80 # Nginx listens on 80
+          - containerPort: 80  # Nginx listens on 80
         volumeMounts:
           - name: shared-files
-            mountPath: /var/www
+            mountPath: /app
           - name: nginx-config
             mountPath: /etc/nginx/conf.d/default.conf
             subPath: default.conf
+
 ---
+
 # 4. Nginx ConfigMap
 apiVersion: v1
 kind: ConfigMap
@@ -140,15 +146,22 @@ data:
     server {
         listen 80;
         server_name localhost;
-        root /var/www/public;
+        root /app/public;
         index index.php index.html;
 
         location / {
             try_files $uri $uri/ /index.php?$query_string;
         }
 
+        # Serve static assets (CSS, JS, images) directly from /app/public
+        location ~* \.(css|js|jpg|jpeg|png|gif|ico|svg|woff|woff2|ttf|eot)$ {
+            expires max;
+            log_not_found off;
+            try_files $uri =404;
+        }
+
         location ~ \.php$ {
-            fastcgi_pass 127.0.0.1:9000; # Talks to PHP-FPM in the same pod
+            fastcgi_pass 127.0.0.1:9000;
             fastcgi_index index.php;
             fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
             include fastcgi_params;
@@ -156,13 +169,14 @@ data:
     }
 
 ---
+
 # 5. Application Service (The "Load Balancer")
 apiVersion: v1
 kind: Service
 metadata:
   name: laravel-service
 spec:
-  type: LoadBalancer # <--- This simulates the AWS ALB
+  type: LoadBalancer # This simulates the AWS ALB
   ports:
     - port: 80
       targetPort: 80
